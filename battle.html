@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Pokédex — Combate WebRTC</title>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Exo+2:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    :root {
+      --red:#e3000f;--black:#0d0d0f;--surface:#141418;--card:#1c1c22;
+      --border:#2a2a35;--text:#f0f0f5;--muted:#7a7a90;
+      --accent:#ffd700;--green:#00ff88;--blue:#4dabf7;
+    }
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{background:var(--black);color:var(--text);font-family:'Exo 2',sans-serif;min-height:100vh;}
+    body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(227,0,15,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(227,0,15,.03) 1px,transparent 1px);background-size:40px 40px;z-index:0;pointer-events:none;}
+
+    nav{position:sticky;top:0;z-index:100;background:rgba(13,13,15,.95);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);padding:0 2rem;display:flex;align-items:center;gap:1rem;height:60px;}
+    .nav-logo{font-family:'Press Start 2P',monospace;font-size:.8rem;color:var(--red);}
+    .nav-sep{color:var(--muted);}
+    .nav-title{font-weight:800;font-size:1rem;}
+    .rtc-badge{background:rgba(0,255,136,.12);border:1px solid rgba(0,255,136,.3);color:var(--green);padding:3px 10px;border-radius:20px;font-size:.68rem;font-weight:700;}
+    .conn-status{display:none;align-items:center;gap:8px;font-size:.75rem;color:var(--muted);padding:5px 12px;background:var(--surface);border:1px solid var(--border);border-radius:20px;margin-left:auto;margin-right:8px;}
+    .conn-dot{width:8px;height:8px;border-radius:50%;background:var(--muted);}
+    .conn-dot.connecting{background:var(--accent);animation:blink 1s infinite;}
+    .conn-dot.connected{background:var(--green);}
+    .conn-dot.failed{background:var(--red);}
+    @keyframes blink{0%,100%{opacity:.3;}50%{opacity:1;}}
+    .back-btn{margin-left:auto;background:var(--surface);border:1px solid var(--border);color:var(--muted);padding:6px 14px;border-radius:8px;cursor:pointer;font-family:'Exo 2',sans-serif;font-size:.8rem;transition:all .2s;text-decoration:none;}
+    .back-btn:hover{border-color:var(--red);color:var(--red);}
+
+    .screen{display:none;position:relative;z-index:1;}
+    .screen.active{display:block;}
+
+    /* LOBBY */
+    #lobbyScreen{max-width:440px;margin:4rem auto;padding:2rem;}
+    .lobby-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:2rem;display:flex;flex-direction:column;gap:1.2rem;}
+    .lobby-title{font-family:'Press Start 2P',monospace;font-size:.8rem;color:var(--red);text-align:center;}
+    .lobby-sub{color:var(--muted);font-size:.75rem;text-align:center;margin-top:-4px;}
+    .lobby-input{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-family:'Exo 2',sans-serif;font-size:.95rem;outline:none;width:100%;transition:border-color .2s;}
+    .lobby-input:focus{border-color:var(--red);}
+    .lobby-input::placeholder{color:var(--muted);}
+    .btn{padding:10px 20px;border-radius:8px;border:none;cursor:pointer;font-family:'Exo 2',sans-serif;font-weight:700;font-size:.9rem;transition:all .2s;width:100%;}
+    .btn-primary{background:var(--red);color:white;}
+    .btn-primary:hover{background:#ff1a2a;box-shadow:0 0 20px rgba(227,0,15,.3);}
+    .btn-secondary{background:var(--card);border:1px solid var(--border);color:var(--muted);}
+    .btn-secondary:hover{border-color:var(--blue);color:var(--blue);}
+    .btn:disabled{opacity:.5;cursor:not-allowed;}
+    .divider{display:flex;align-items:center;gap:1rem;color:var(--muted);font-size:.8rem;}
+    .divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border);}
+    .room-code-display{background:var(--card);border:1px solid var(--accent);border-radius:10px;padding:1.2rem;text-align:center;}
+    .code{font-family:'Press Start 2P',monospace;font-size:1.5rem;color:var(--accent);letter-spacing:5px;cursor:pointer;user-select:all;}
+    .hint{color:var(--muted);font-size:.72rem;margin-top:.4rem;}
+    .waiting-dots{display:flex;justify-content:center;gap:6px;margin-top:.6rem;}
+    .waiting-dots span{width:7px;height:7px;background:var(--accent);border-radius:50%;animation:pulse 1s ease-in-out infinite;}
+    .waiting-dots span:nth-child(2){animation-delay:.2s;}
+    .waiting-dots span:nth-child(3){animation-delay:.4s;}
+    @keyframes pulse{0%,100%{opacity:.3;transform:scale(.8);}50%{opacity:1;transform:scale(1);}}
+    .error-msg{color:var(--red);font-size:.82rem;text-align:center;padding:8px;background:rgba(227,0,15,.08);border-radius:6px;display:none;}
+
+    /* TEAM SELECT */
+    #selectScreen{max-width:1100px;margin:0 auto;padding:1.5rem;}
+    .select-header{display:flex;align-items:center;gap:1rem;margin-bottom:1.2rem;flex-wrap:wrap;}
+    .select-title{font-family:'Press Start 2P',monospace;font-size:.7rem;color:var(--red);flex-shrink:0;}
+    .team-preview{display:flex;gap:6px;}
+    .team-slot{width:48px;height:48px;background:var(--card);border:2px dashed var(--border);border-radius:8px;overflow:hidden;position:relative;flex-shrink:0;}
+    .team-slot img{width:100%;image-rendering:pixelated;}
+    .team-slot .remove{position:absolute;top:-3px;right:-3px;background:var(--red);border:none;color:white;width:14px;height:14px;border-radius:50%;font-size:7px;cursor:pointer;display:none;align-items:center;justify-content:center;}
+    .team-slot:hover .remove{display:flex;}
+    .select-search-wrap{position:relative;margin-left:auto;}
+    .select-search-wrap::before{content:'🔍';position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:.8rem;}
+    .select-search{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 14px 9px 34px;color:var(--text);font-family:'Exo 2',sans-serif;font-size:.88rem;outline:none;width:230px;transition:border-color .2s;}
+    .select-search:focus{border-color:var(--red);}
+    .poke-select-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;max-height:calc(100vh - 260px);overflow-y:auto;}
+    .poke-select-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px 6px;cursor:pointer;transition:all .2s;text-align:center;}
+    .poke-select-card:hover{border-color:var(--red);transform:translateY(-2px);}
+    .poke-select-card.selected{border-color:var(--accent);background:rgba(255,215,0,.08);}
+    .poke-select-card.disabled{opacity:.3;pointer-events:none;}
+    .poke-select-card img{width:58px;image-rendering:pixelated;}
+    .poke-select-card .name{font-size:.68rem;text-transform:capitalize;color:var(--muted);margin-top:3px;}
+    .poke-select-card .num{font-family:'Press Start 2P',monospace;font-size:.38rem;color:var(--muted);margin-bottom:2px;}
+    .waiting-opponent{text-align:center;padding:1.2rem;color:var(--muted);font-size:.85rem;}
+
+    /* BATTLE */
+    #battleScreen{max-width:860px;margin:0 auto;padding:1.5rem;}
+    .turn-indicator{text-align:center;padding:.6rem;font-family:'Press Start 2P',monospace;font-size:.52rem;margin-bottom:1rem;border-radius:8px;transition:all .3s;}
+    .turn-indicator.your-turn{background:rgba(0,255,136,.08);color:var(--green);border:1px solid rgba(0,255,136,.2);}
+    .turn-indicator.opponent-turn{background:rgba(227,0,15,.06);color:var(--red);border:1px solid rgba(227,0,15,.15);}
+    .battle-arena{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:1.5rem;margin-bottom:1rem;}
+    .fighter-row{display:grid;grid-template-columns:1fr auto 1fr;gap:1rem;align-items:start;margin-bottom:1.2rem;}
+    .fighter{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1rem;transition:border-color .3s,box-shadow .3s;}
+    .fighter.active-turn{border-color:var(--accent);box-shadow:0 0 14px rgba(255,215,0,.12);}
+    .fighter-label{font-family:'Press Start 2P',monospace;font-size:.48rem;color:var(--muted);margin-bottom:.6rem;}
+    .fighter-poke{display:flex;align-items:center;gap:10px;}
+    .fighter-poke img{width:60px;image-rendering:pixelated;filter:drop-shadow(0 2px 6px rgba(0,0,0,.5));transition:transform .3s;}
+    .fighter.active-turn img{transform:scale(1.06);}
+    .fighter-poke-info{flex:1;min-width:0;}
+    .fighter-poke-name{font-weight:800;font-size:.9rem;text-transform:capitalize;margin-bottom:4px;}
+    .hp-bar-wrap{height:7px;background:var(--black);border-radius:4px;overflow:hidden;margin-bottom:3px;}
+    .hp-bar{height:100%;border-radius:4px;transition:width .5s ease,background .5s;}
+    .hp-text{font-size:.68rem;color:var(--muted);}
+    .vs-badge{font-family:'Press Start 2P',monospace;font-size:.75rem;color:var(--muted);align-self:center;}
+    .bench{display:flex;gap:5px;margin-top:.7rem;flex-wrap:wrap;}
+    .bench-slot{width:32px;height:32px;background:var(--black);border:1px solid var(--border);border-radius:6px;overflow:hidden;cursor:pointer;transition:border-color .2s;}
+    .bench-slot img{width:100%;image-rendering:pixelated;}
+    .bench-slot.active-poke{border-color:var(--accent);}
+    .bench-slot.fainted{opacity:.25;filter:grayscale(1);pointer-events:none;}
+    .bench-slot:hover:not(.fainted):not(.active-poke){border-color:var(--blue);}
+    .moves-section{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1rem;}
+    .moves-title{font-family:'Press Start 2P',monospace;font-size:.47rem;color:var(--muted);margin-bottom:.7rem;}
+    .moves-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;}
+    .move-btn{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 12px;cursor:pointer;text-align:left;transition:all .2s;font-family:'Exo 2',sans-serif;}
+    .move-btn:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.3);}
+    .move-btn:disabled{opacity:.35;cursor:not-allowed;}
+    .move-name{font-weight:700;font-size:.82rem;color:var(--text);text-transform:capitalize;margin-bottom:3px;}
+    .move-meta{display:flex;gap:6px;font-size:.67rem;color:var(--muted);align-items:center;}
+    .move-type-badge{padding:2px 7px;border-radius:10px;font-size:.58rem;font-weight:700;text-transform:uppercase;color:white;}
+    .move-power{color:var(--accent);}
+    .battle-log{background:var(--black);border:1px solid var(--border);border-radius:10px;padding:.8rem;height:120px;overflow-y:auto;font-size:.78rem;line-height:1.9;}
+    .log-entry{color:var(--muted);}
+    .log-entry.highlight{color:var(--text);}
+    .log-entry.system{color:var(--blue);}
+
+    /* END */
+    .end-overlay{position:fixed;inset:0;background:rgba(0,0,0,.88);backdrop-filter:blur(8px);z-index:200;display:none;align-items:center;justify-content:center;}
+    .end-overlay.show{display:flex;}
+    .end-card{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:3rem;text-align:center;max-width:380px;}
+    .end-title{font-family:'Press Start 2P',monospace;font-size:1rem;margin-bottom:.8rem;}
+    .end-title.win{color:var(--accent);}
+    .end-title.lose{color:var(--red);}
+    .end-sub{color:var(--muted);margin-bottom:2rem;font-size:.88rem;}
+    .end-btns{display:flex;gap:8px;justify-content:center;}
+    .end-btns .btn{width:auto;padding:10px 24px;}
+
+    ::-webkit-scrollbar{width:4px;}
+    ::-webkit-scrollbar-track{background:var(--black);}
+    ::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+  </style>
+</head>
+<body>
+
+<nav>
+  <span class="nav-logo">POKÉDEX</span>
+  <span class="nav-sep">›</span>
+  <span class="nav-title">⚔️ Combate</span>
+  <span class="rtc-badge">WebRTC P2P</span>
+  <div class="conn-status" id="connStatus">
+    <div class="conn-dot" id="connDot"></div>
+    <span id="connLabel">Conectando...</span>
+  </div>
+  <a href="/" class="back-btn">← Volver</a>
+</nav>
+
+<!-- LOBBY -->
+<div id="lobbyScreen" class="screen active">
+  <div class="lobby-card">
+    <div class="lobby-title">⚔️ COMBATE P2P</div>
+    <div class="lobby-sub">Conexión directa entre navegadores vía WebRTC</div>
+    <input class="lobby-input" id="playerName" placeholder="Tu nombre de entrenador..." maxlength="16"/>
+    <button class="btn btn-primary" onclick="createRoom()">Crear sala</button>
+    <div class="divider">o únete con un código</div>
+    <input class="lobby-input" id="joinCode" placeholder="Código de sala..." maxlength="6"
+           style="text-transform:uppercase;letter-spacing:3px;text-align:center;"
+           oninput="this.value=this.value.toUpperCase()"/>
+    <button class="btn btn-secondary" onclick="joinRoom()">Unirse</button>
+    <div class="error-msg" id="lobbyError"></div>
+  </div>
+  <div id="waitingBox" style="display:none;margin-top:1.2rem;">
+    <div class="room-code-display">
+      <div class="code" title="Click para copiar" onclick="copyCode()" id="displayCode">——</div>
+      <div class="hint">Comparte este código con tu rival · Click para copiar</div>
+      <div class="waiting-dots"><span></span><span></span><span></span></div>
+      <div class="hint" style="margin-top:.4rem;">Esperando oponente...</div>
+    </div>
+  </div>
+</div>
+
+<!-- TEAM SELECT -->
+<div id="selectScreen" class="screen">
+  <div class="select-header">
+    <div class="select-title">ELIGE TU EQUIPO</div>
+    <div class="team-preview" id="teamPreview"></div>
+    <div class="select-search-wrap">
+      <input class="select-search" id="selectSearch" placeholder="Buscar..." oninput="filterGrid()"/>
+    </div>
+  </div>
+  <div class="poke-select-grid" id="selectGrid"></div>
+  <div id="waitingTeam" class="waiting-opponent" style="display:none;">
+    <div class="waiting-dots" style="justify-content:center;"><span></span><span></span><span></span></div>
+    <p style="margin-top:.6rem;">Esperando que tu rival confirme su equipo...</p>
+  </div>
+  <button class="btn btn-primary" id="confirmBtn" style="margin-top:1rem;" onclick="confirmTeam()" disabled>
+    Confirmar equipo (0/6)
+  </button>
+</div>
+
+<!-- BATTLE -->
+<div id="battleScreen" class="screen">
+  <div class="turn-indicator" id="turnIndicator">Preparando combate...</div>
+  <div class="battle-arena">
+    <div class="fighter-row">
+      <div class="fighter" id="myFighter">
+        <div class="fighter-label" id="myLabel">—</div>
+        <div class="fighter-poke">
+          <img id="mySprite" src="" alt=""/>
+          <div class="fighter-poke-info">
+            <div class="fighter-poke-name" id="myPokeName">—</div>
+            <div class="hp-bar-wrap"><div class="hp-bar" id="myHpBar" style="width:100%"></div></div>
+            <div class="hp-text" id="myHpText">—</div>
+          </div>
+        </div>
+        <div class="bench" id="myBench"></div>
+      </div>
+      <div class="vs-badge">VS</div>
+      <div class="fighter" id="oppFighter">
+        <div class="fighter-label" id="oppLabel">—</div>
+        <div class="fighter-poke">
+          <img id="oppSprite" src="" alt=""/>
+          <div class="fighter-poke-info">
+            <div class="fighter-poke-name" id="oppPokeName">—</div>
+            <div class="hp-bar-wrap"><div class="hp-bar" id="oppHpBar" style="width:100%"></div></div>
+            <div class="hp-text" id="oppHpText">—</div>
+          </div>
+        </div>
+        <div class="bench" id="oppBench"></div>
+      </div>
+    </div>
+    <div class="moves-section">
+      <div class="moves-title">MOVIMIENTOS</div>
+      <div class="moves-grid" id="movesGrid"></div>
+    </div>
+  </div>
+  <div class="battle-log" id="battleLog"></div>
+</div>
+
+<!-- END -->
+<div class="end-overlay" id="endOverlay">
+  <div class="end-card">
+    <div class="end-title" id="endTitle">—</div>
+    <div class="end-sub" id="endSub"></div>
+    <div class="end-btns">
+      <button class="btn btn-primary" onclick="location.href='/battle.html'">Revancha</button>
+      <button class="btn btn-secondary" onclick="location.href='/'">Pokédex</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const TYPE_COLORS = {
+  fire:'#ff6b35',water:'#4dabf7',grass:'#69db7c',electric:'#ffd43b',
+  psychic:'#f783ac',ice:'#a5f3fc',dragon:'#845ef7',dark:'#6b7280',
+  fairy:'#e879f9',normal:'#9ca3af',fighting:'#ef4444',poison:'#a855f7',
+  ground:'#d97706',flying:'#7dd3fc',bug:'#84cc16',rock:'#9ca3af',
+  ghost:'#7c3aed',steel:'#94a3b8'
+};
+
+const TYPE_CHART = {
+  normal:   {weak:['fighting'],immune:['ghost'],resist:[]},
+  fire:     {weak:['water','ground','rock'],immune:[],resist:['fire','grass','ice','bug','steel','fairy']},
+  water:    {weak:['electric','grass'],immune:[],resist:['fire','water','ice','steel']},
+  grass:    {weak:['fire','ice','poison','flying','bug'],immune:[],resist:['water','electric','grass','ground']},
+  electric: {weak:['ground'],immune:[],resist:['electric','flying','steel']},
+  ice:      {weak:['fire','fighting','rock','steel'],immune:[],resist:['ice']},
+  fighting: {weak:['flying','psychic','fairy'],immune:[],resist:['bug','rock','dark']},
+  poison:   {weak:['ground','psychic'],immune:[],resist:['grass','fighting','poison','bug','fairy']},
+  ground:   {weak:['water','grass','ice'],immune:['electric'],resist:['poison','rock']},
+  flying:   {weak:['electric','ice','rock'],immune:['ground'],resist:['grass','fighting','bug']},
+  psychic:  {weak:['bug','ghost','dark'],immune:[],resist:['fighting','psychic']},
+  bug:      {weak:['fire','flying','rock'],immune:[],resist:['grass','fighting','ground']},
+  rock:     {weak:['water','grass','fighting','ground','steel'],immune:[],resist:['normal','fire','poison','flying']},
+  ghost:    {weak:['ghost','dark'],immune:['normal','fighting'],resist:['poison','bug']},
+  dragon:   {weak:['ice','dragon','fairy'],immune:[],resist:['fire','water','electric','grass']},
+  dark:     {weak:['fighting','bug','fairy'],immune:['psychic'],resist:['ghost','dark']},
+  steel:    {weak:['fire','fighting','ground'],immune:['poison'],resist:['normal','grass','ice','flying','psychic','bug','rock','dragon','steel','fairy']},
+  fairy:    {weak:['poison','steel'],immune:['dragon'],resist:['fighting','bug','dark']},
+};
+
+function getMultiplier(moveType, defTypes) {
+  let m = 1;
+  defTypes.forEach(dt => {
+    const c = TYPE_CHART[dt]; if (!c) return;
+    if (c.immune.includes(moveType)) m *= 0;
+    else if (c.weak.includes(moveType)) m *= 2;
+    else if (c.resist.includes(moveType)) m *= 0.5;
+  });
+  return m;
+}
+
+// Seeded LCG so both peers compute identical damage
+function seededRand(seed) { return (((seed * 1664525 + 1013904223) & 0xffffffff) >>> 0) / 0xffffffff; }
+
+function calcDamage(atkPoke, move, defPoke, seed) {
+  const power = move.power || 40;
+  const special = ['psychic','fire','water','grass','electric','ice','dragon','fairy','ghost','dark'];
+  const atk = special.includes(move.type) ? atkPoke.stats['special-attack'] : atkPoke.stats['attack'];
+  const def = special.includes(move.type) ? defPoke.stats['special-defense'] : defPoke.stats['defense'];
+  const mult = getMultiplier(move.type, defPoke.types);
+  const stab = atkPoke.types.includes(move.type) ? 1.5 : 1;
+  const rand = 0.85 + seededRand(seed) * 0.15;
+  const dmg  = Math.max(1, Math.floor(((2*50/5+2)*power*atk/def/50+2)*stab*mult*rand));
+  return { dmg, mult };
+}
+
+// ── State ─────────────────────────────────────────────────
+const socket = io();
+let myName = '', opponentName = '', roomCode = '';
+let myIdx = null, role = null;
+let myTeam=[], oppTeam=[], myHp=[], oppHp=[];
+let myCurrentIdx=0, oppCurrentIdx=0;
+let myTurn = false;
+let selectedTeam = [], allPokemon = [], moveCache = {};
+let peerTeamReady = false, myTeamReady = false;
+
+// ── WebRTC ────────────────────────────────────────────────
+let pc = null, dc = null;
+const RTC_CONFIG = { iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}] };
+
+function setConn(state, label) {
+  const s=document.getElementById('connStatus'), dot=document.getElementById('connDot'), lbl=document.getElementById('connLabel');
+  s.style.display='flex'; dot.className='conn-dot '+state; lbl.textContent=label;
+}
+
+function setupPC() {
+  pc = new RTCPeerConnection(RTC_CONFIG);
+  pc.onicecandidate = ({candidate}) => { if (candidate) socket.emit('signal',{type:'candidate',candidate}); };
+  pc.onconnectionstatechange = () => {
+    const s = pc.connectionState;
+    if (s==='connected') setConn('connected','P2P conectado');
+    else if (s==='connecting') setConn('connecting','Conectando...');
+    else if (s==='failed'||s==='disconnected') { setConn('failed','Conexión perdida'); addLog('⚠️ Conexión P2P perdida.','system'); }
+  };
+  pc.ondatachannel = e => { dc=e.channel; setupDC(); };
+}
+
+function setupDC() {
+  dc.onopen  = () => { setConn('connected','P2P conectado'); addLog('🔗 Conexión directa establecida.','system'); };
+  dc.onclose = () => { setConn('failed','Canal cerrado'); showEnd(false,'Tu rival se desconectó.'); };
+  dc.onmessage = e => onPeerMsg(JSON.parse(e.data));
+}
+
+function send(data) { if (dc && dc.readyState==='open') dc.send(JSON.stringify(data)); }
+
+async function initAsInitiator() {
+  setupPC();
+  dc = pc.createDataChannel('battle',{ordered:true});
+  setupDC();
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  socket.emit('signal',{type:'offer',sdp:offer});
+  setConn('connecting','Enviando oferta...');
+}
+
+async function handleSignal(data) {
+  if (!pc) setupPC();
+  if (data.type==='offer') {
+    await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    socket.emit('signal',{type:'answer',sdp:answer});
+    setConn('connecting','Respondiendo...');
+  } else if (data.type==='answer') {
+    await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+  } else if (data.type==='candidate') {
+    try { await pc.addIceCandidate(new RTCIceCandidate(data.candidate)); } catch(e){}
+  }
+}
+
+// ── Socket signaling ──────────────────────────────────────
+function showErr(msg) {
+  const el=document.getElementById('lobbyError');
+  el.textContent=msg; el.style.display='block';
+  setTimeout(()=>el.style.display='none',4000);
+}
+
+function createRoom() {
+  myName = document.getElementById('playerName').value.trim();
+  if (!myName) return showErr('Ingresa tu nombre primero.');
+  socket.emit('create_room',{playerName:myName});
+}
+
+function joinRoom() {
+  myName = document.getElementById('playerName').value.trim();
+  const code = document.getElementById('joinCode').value.trim().toUpperCase();
+  if (!myName) return showErr('Ingresa tu nombre primero.');
+  if (code.length<4) return showErr('Ingresa el código de sala.');
+  socket.emit('join_room',{code,playerName:myName});
+}
+
+function copyCode() {
+  navigator.clipboard.writeText(roomCode).catch(()=>{});
+  const el=document.getElementById('displayCode'), prev=el.textContent;
+  el.textContent='¡Copiado!'; setTimeout(()=>el.textContent=prev,1200);
+}
+
+socket.on('room_created',({code})=>{
+  roomCode=code; myIdx=0; role='initiator';
+  document.getElementById('displayCode').textContent=code;
+  document.getElementById('waitingBox').style.display='block';
+});
+
+socket.on('signal_error', showErr);
+
+socket.on('peer_ready',({role:r, opponentName:on})=>{
+  opponentName=on; role=r; myIdx=r==='initiator'?0:1;
+  if (r==='initiator') initAsInitiator();
+  goToSelect();
+});
+
+socket.on('signal', handleSignal);
+socket.on('peer_disconnected',()=>showEnd(true,'Tu rival abandonó la sala.'));
+
+// ── Team Selection ────────────────────────────────────────
+async function goToSelect() {
+  showScreen('selectScreen');
+  if (!allPokemon.length) {
+    const r = await fetch('https://pokeapi.co/api/v2/pokemon?limit=1025');
+    const d = await r.json();
+    allPokemon = d.results.map((p,i)=>({name:p.name,id:i+1}));
+  }
+  renderGrid(allPokemon);
+  renderPreview();
+}
+
+function renderGrid(list) {
+  document.getElementById('selectGrid').innerHTML = list.map(p=>`
+    <div class="poke-select-card ${selectedTeam.find(s=>s.id===p.id)?'selected':''} ${selectedTeam.length>=6&&!selectedTeam.find(s=>s.id===p.id)?'disabled':''}"
+         onclick="toggleSelect(${p.id},'${p.name}')">
+      <div class="num">#${String(p.id).padStart(3,'0')}</div>
+      <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${p.id}.png" loading="lazy"/>
+      <div class="name">${p.name}</div>
+    </div>`).join('');
+}
+
+function filterGrid() {
+  const q=document.getElementById('selectSearch').value.toLowerCase();
+  renderGrid(allPokemon.filter(p=>p.name.includes(q)||String(p.id).includes(q)));
+}
+
+function toggleSelect(id,name) {
+  const i=selectedTeam.findIndex(p=>p.id===id);
+  if (i>=0) selectedTeam.splice(i,1);
+  else { if(selectedTeam.length>=6) return; selectedTeam.push({id,name}); }
+  renderPreview(); filterGrid();
+  const btn=document.getElementById('confirmBtn');
+  btn.textContent=`Confirmar equipo (${selectedTeam.length}/6)`;
+  btn.disabled=selectedTeam.length!==6;
+}
+
+function renderPreview() {
+  document.getElementById('teamPreview').innerHTML=Array(6).fill(0).map((_,i)=>{
+    const p=selectedTeam[i];
+    return `<div class="team-slot">${p?`<img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${p.id}.png"/>
+      <button class="remove" onclick="toggleSelect(${p.id},'${p.name}');event.stopPropagation()">✕</button>`:''}
+    </div>`;
+  }).join('');
+}
+
+async function confirmTeam() {
+  if (selectedTeam.length!==6) return;
+  const btn=document.getElementById('confirmBtn');
+  btn.disabled=true; btn.textContent='Cargando datos...';
+
+  const fullTeam = await Promise.all(selectedTeam.map(async p=>{
+    const res=await fetch(`https://pokeapi.co/api/v2/pokemon/${p.id}`);
+    const data=await res.json();
+    const stats={}; data.stats.forEach(s=>{stats[s.stat.name]=s.base_stat;});
+    const learnedNames=data.moves.filter(m=>m.version_group_details.some(v=>v.move_learn_method.name==='level-up')).map(m=>m.move.name).slice(0,12);
+    const movesData=(await Promise.all(learnedNames.map(async key=>{
+      if (moveCache[key]) return moveCache[key];
+      try {
+        const mr=await fetch(`https://pokeapi.co/api/v2/move/${key}`);
+        const md=await mr.json();
+        const mv={name:key,type:md.type.name,power:md.power||0,accuracy:md.accuracy||100,pp:md.pp||20};
+        moveCache[key]=mv; return mv;
+      } catch(e){return null;}
+    }))).filter(m=>m&&m.power>0).slice(0,4);
+    while(movesData.length<4) movesData.push({name:'tackle',type:'normal',power:40,accuracy:100,pp:35});
+    return { id:p.id, name:p.name, types:data.types.map(t=>t.type.name), stats, moves:movesData,
+             sprite:`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${p.id}.png` };
+  }));
+
+  myTeam=fullTeam; myHp=fullTeam.map(p=>p.stats.hp); myCurrentIdx=0;
+  btn.textContent='✓ Listo, esperando rival...';
+  document.getElementById('waitingTeam').style.display='block';
+  myTeamReady=true;
+  send({type:'team_ready',team:fullTeam});
+  checkBothReady();
+}
+
+function checkBothReady() {
+  if (myTeamReady && peerTeamReady) startBattle();
+}
+
+// ── DataChannel messages ──────────────────────────────────
+function onPeerMsg(msg) {
+  if (msg.type==='team_ready') {
+    oppTeam=msg.team; oppHp=msg.team.map(p=>p.stats.hp); oppCurrentIdx=0;
+    peerTeamReady=true; checkBothReady();
+  }
+  else if (msg.type==='move_used') {
+    const {move,seed}=msg;
+    const atkPoke=oppTeam[oppCurrentIdx], defPoke=myTeam[myCurrentIdx];
+    const {dmg,mult}=calcDamage(atkPoke,move,defPoke,seed);
+    myHp[myCurrentIdx]=Math.max(0,myHp[myCurrentIdx]-dmg);
+    let eff='';
+    if(mult===0) eff='¡No afecta!';
+    else if(mult>=4) eff='¡Es muy eficaz! (×4)';
+    else if(mult>=2) eff='¡Es muy eficaz!';
+    else if(mult<1&&mult>0) eff='No es muy eficaz...';
+    addLog(`${opponentName}'s ${atkPoke.name} usó ${move.name} → ${dmg} daño${eff?' — '+eff:''}`, 'highlight');
+    updateFighter('my');
+    const fainted=myHp[myCurrentIdx]===0;
+    if(fainted) addLog(`¡${defPoke.name} se debilitó!`);
+    if(myHp.every(h=>h===0)){showEnd(false,`${opponentName} ha ganado.`);return;}
+    if(!fainted){myTurn=true;updateTurnUI();}
+    else addLog('Debes cambiar de Pokémon.');
+  }
+  else if (msg.type==='switch') {
+    oppCurrentIdx=msg.toIdx;
+    addLog(`${opponentName} envió a ${oppTeam[oppCurrentIdx].name}!`);
+    updateFighter('opp');
+    if(!msg.forced){myTurn=true;updateTurnUI();}
+  }
+}
+
+// ── Battle ────────────────────────────────────────────────
+function startBattle() {
+  showScreen('battleScreen');
+  myTurn=(myIdx===0);
+  updateFighter('my'); updateFighter('opp');
+  updateTurnUI();
+  addLog('¡Comienza el combate! Conexión WebRTC P2P directa.','system');
+}
+
+function updateFighter(side) {
+  const isMe=side==='my';
+  const team=isMe?myTeam:oppTeam, hp=isMe?myHp:oppHp, idx=isMe?myCurrentIdx:oppCurrentIdx;
+  const name=isMe?myName:opponentName;
+  const poke=team[idx]; if(!poke) return;
+  const pct=Math.max(0,Math.round(hp[idx]/poke.stats.hp*100));
+  const color=pct>50?'#00ff88':pct>20?'#ffd700':'#ef4444';
+  document.getElementById(`${side}Label`).textContent=name;
+  document.getElementById(`${side}Sprite`).src=poke.sprite;
+  document.getElementById(`${side}PokeName`).textContent=poke.name;
+  document.getElementById(`${side}HpBar`).style.cssText=`width:${pct}%;background:${color}`;
+  document.getElementById(`${side}HpText`).textContent=`${hp[idx]} / ${poke.stats.hp}`;
+  document.getElementById(`${side}Bench`).innerHTML=team.map((p,i)=>`
+    <div class="bench-slot ${i===idx?'active-poke':''} ${hp[i]===0?'fainted':''}"
+         onclick="${isMe?`switchPokemon(${i})`:''}">
+      <img src="${p.sprite}"/>
+    </div>`).join('');
+}
+
+function updateTurnUI() {
+  const ind=document.getElementById('turnIndicator');
+  ind.className=`turn-indicator ${myTurn?'your-turn':'opponent-turn'}`;
+  ind.textContent=myTurn?'¡Tu turno! Elige un movimiento.':`Turno de ${opponentName}...`;
+  document.getElementById('myFighter').classList.toggle('active-turn',myTurn);
+  document.getElementById('oppFighter').classList.toggle('active-turn',!myTurn);
+  renderMoves(myTurn);
+}
+
+function renderMoves(enabled) {
+  const poke=myTeam[myCurrentIdx]; if(!poke) return;
+  document.getElementById('movesGrid').innerHTML=poke.moves.map(m=>`
+    <button class="move-btn" onclick='useMove(${JSON.stringify(m)})' ${!enabled?'disabled':''}>
+      <div class="move-name">${m.name.replace(/-/g,' ')}</div>
+      <div class="move-meta">
+        <span class="move-type-badge" style="background:${TYPE_COLORS[m.type]||'#555'}">${m.type}</span>
+        <span class="move-power">⚡ ${m.power}</span>
+        <span>PP ${m.pp}</span>
+      </div>
+    </button>`).join('');
+}
+
+function useMove(move) {
+  if (!myTurn) return;
+  myTurn=false; renderMoves(false);
+  const seed=Date.now()%1000000;
+  const atkPoke=myTeam[myCurrentIdx], defPoke=oppTeam[oppCurrentIdx];
+  const {dmg,mult}=calcDamage(atkPoke,move,defPoke,seed);
+  oppHp[oppCurrentIdx]=Math.max(0,oppHp[oppCurrentIdx]-dmg);
+  let eff='';
+  if(mult===0) eff='¡No afecta!';
+  else if(mult>=4) eff='¡Es muy eficaz! (×4)';
+  else if(mult>=2) eff='¡Es muy eficaz!';
+  else if(mult<1&&mult>0) eff='No es muy eficaz...';
+  addLog(`${myName}'s ${atkPoke.name} usó ${move.name} → ${dmg} daño${eff?' — '+eff:''}`, 'highlight');
+  updateFighter('opp');
+  send({type:'move_used',move,seed});
+  const fainted=oppHp[oppCurrentIdx]===0;
+  if(fainted) addLog(`¡${defPoke.name} se debilitó!`);
+  if(oppHp.every(h=>h===0)){showEnd(true,'¡Has derrotado todos los Pokémon rivales!');return;}
+  if(fainted) addLog(`${opponentName} debe cambiar de Pokémon...`);
+  updateTurnUI();
+}
+
+function switchPokemon(toIdx) {
+  if(toIdx===myCurrentIdx||myHp[toIdx]===0) return;
+  const forced=myHp[myCurrentIdx]===0;
+  myCurrentIdx=toIdx;
+  updateFighter('my');
+  addLog(`${myName} envió a ${myTeam[toIdx].name}!`);
+  send({type:'switch',toIdx,forced});
+  if(!forced){myTurn=false;updateTurnUI();}
+  else updateTurnUI();
+}
+
+function showEnd(won, subtitle) {
+  document.getElementById('endTitle').textContent=won?'🏆 ¡VICTORIA!':'💀 DERROTA';
+  document.getElementById('endTitle').className=`end-title ${won?'win':'lose'}`;
+  document.getElementById('endSub').textContent=subtitle;
+  document.getElementById('endOverlay').classList.add('show');
+}
+
+function addLog(msg,cls='') {
+  const log=document.getElementById('battleLog');
+  const div=document.createElement('div');
+  div.className=`log-entry ${cls}`; div.textContent=msg;
+  log.appendChild(div); log.scrollTop=log.scrollHeight;
+}
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+</script>
+</body>
+</html>
