@@ -1,0 +1,16 @@
+services:
+  pokedex:
+    build: .
+    container_name: pokedex_app
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+    restart: unless-stopped
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate --url http://pokedex:3000
+    restart: unless-stopped
+    depends_on:
+      - pokedex

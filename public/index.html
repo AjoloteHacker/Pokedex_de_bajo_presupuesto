@@ -858,6 +858,33 @@
   <div class="pokemon-grid" id="pokeGrid"></div>
 </main>
 
+<footer style="text-align:center; padding: 2rem; border-top:1px solid var(--border); background:rgba(20,20,24,0.5); position:relative; z-index:1; display:flex; flex-direction:column; align-items:center; gap: 1rem; margin-top: 3rem;">
+  <div style="font-size: .8rem; color: var(--muted);">© 2026 Pokédex de Bajo Presupuesto · Versión 1.4.0 · Todos los derechos reservados.</div>
+  <button id="doxBtn" style="background:var(--red); color:white; border:none; padding:10px 20px; font-family:'Press Start 2P',monospace; font-size:.5rem; border-radius:8px; cursor:pointer; box-shadow:0 0 10px rgba(227,0,15,0.3); transition:all .2s; outline:none;">
+    ⚠️ NO HACER CLICK
+  </button>
+</footer>
+
+<!-- Dox Overlay -->
+<div id="doxOverlay" style="display:none; position:fixed; inset:0; background:black; z-index:99999; flex-direction:column; align-items:center; justify-content:center; gap:1.5rem; text-align:center; padding:1rem;">
+  <h1 style="font-family:'Press Start 2P',monospace; color:var(--red); text-shadow:0 0 20px var(--red); font-size:2rem; animation: blink 0.5s infinite alternate; margin-bottom:.5rem;">
+    💥 DOXEADO PAPU XD 💥
+  </h1>
+  <video id="doxVideo" width="640" height="360" controls style="border:5px solid var(--red); border-radius:10px; box-shadow:0 0 30px var(--red); max-width:90%;">
+    <source src="/lo-doxea-en-hd.mp4" type="video/mp4">
+    Tu navegador no soporta videos.
+  </video>
+  <button onclick="closeDox()" style="background:#222; border:1px solid #444; color:#fff; font-family:'Press Start 2P',monospace; font-size:.6rem; padding:8px 16px; border-radius:6px; cursor:pointer; margin-top:.5rem;">
+    Cerrar
+  </button>
+</div>
+<style>
+  @keyframes blink {
+    from { opacity: 0.3; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1.05); }
+  }
+</style>
+
 <!-- Modal -->
 <div class="modal-overlay" id="modalOverlay">
   <div class="modal" id="modalContent">
@@ -867,6 +894,155 @@
 </div>
 
 <script>
+const MEGA_DATA = {
+  garchompita: {
+    stone: 'garchompita',
+    pokeName: 'garchomp',
+    stoneName: 'Garchompita',
+    megaName: 'garchomp-mega',
+    megaDisplayName: 'Mega Garchomp',
+    ability: 'sand-force',
+    types: ['dragon', 'ground'],
+    sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/10058.png',
+    statBoosts: { hp: 0, attack: 40, defense: 20, 'special-attack': 40, 'special-defense': 10, speed: -10 }
+  },
+  charizardita_x: {
+    stone: 'charizardita_x',
+    pokeName: 'charizard',
+    stoneName: 'Charizardita X',
+    megaName: 'charizard-mega-x',
+    megaDisplayName: 'Mega Charizard X',
+    ability: 'tough-claws',
+    types: ['fire', 'dragon'],
+    sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/10034.png',
+    statBoosts: { hp: 0, attack: 46, defense: 33, 'special-attack': 21, 'special-defense': 0, speed: 0 }
+  },
+  charizardita_y: {
+    stone: 'charizardita_y',
+    pokeName: 'charizard',
+    stoneName: 'Charizardita Y',
+    megaName: 'charizard-mega-y',
+    megaDisplayName: 'Mega Charizard Y',
+    ability: 'drought',
+    types: ['fire', 'flying'],
+    sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/10035.png',
+    statBoosts: { hp: 0, attack: 20, defense: 0, 'special-attack': 50, 'special-defense': 30, speed: 0 }
+  },
+  venusaurita: {
+    stone: 'venusaurita',
+    pokeName: 'venusaur',
+    stoneName: 'Venusaurita',
+    megaName: 'venusaur-mega',
+    megaDisplayName: 'Mega Venusaur',
+    ability: 'thick-fat',
+    types: ['grass', 'poison'],
+    sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/10033.png',
+    statBoosts: { hp: 0, attack: 18, defense: 40, 'special-attack': 22, 'special-defense': 20, speed: 0 }
+  },
+  blastoisita: {
+    stone: 'blastoisita',
+    pokeName: 'blastoise',
+    stoneName: 'Blastoisita',
+    megaName: 'blastoise-mega',
+    megaDisplayName: 'Mega Blastoise',
+    ability: 'mega-launcher',
+    types: ['water'],
+    sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/10036.png',
+    statBoosts: { hp: 0, attack: 20, defense: 20, 'special-attack': 50, 'special-defense': 10, speed: 0 }
+  },
+  lucarita: {
+    stone: 'lucarita',
+    pokeName: 'lucario',
+    stoneName: 'Lucarita',
+    megaName: 'lucario-mega',
+    megaDisplayName: 'Mega Lucario',
+    ability: 'adaptability',
+    types: ['fighting', 'steel'],
+    sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/10059.png',
+    statBoosts: { hp: 0, attack: 35, defense: 18, 'special-attack': 25, 'special-defense': 0, speed: 22 }
+  },
+  gengarita: {
+    stone: 'gengarita',
+    pokeName: 'gengar',
+    stoneName: 'Gengarita',
+    megaName: 'gengar-mega',
+    megaDisplayName: 'Mega Gengar',
+    ability: 'shadow-tag',
+    types: ['ghost', 'poison'],
+    sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/10038.png',
+    statBoosts: { hp: 0, attack: 0, defense: 20, 'special-attack': 40, 'special-defense': 20, speed: 20 }
+  },
+  mewtwoita_x: {
+    stone: 'mewtwoita_x',
+    pokeName: 'mewtwo',
+    stoneName: 'Mewtwoita X',
+    megaName: 'mewtwo-mega-x',
+    megaDisplayName: 'Mega Mewtwo X',
+    ability: 'steadfast',
+    types: ['psychic', 'fighting'],
+    sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/10043.png',
+    statBoosts: { hp: 0, attack: 80, defense: 10, 'special-attack': 0, 'special-defense': 10, speed: 0 }
+  },
+  mewtwoita_y: {
+    stone: 'mewtwoita_y',
+    pokeName: 'mewtwo',
+    stoneName: 'Mewtwoita Y',
+    megaName: 'mewtwo-mega-y',
+    megaDisplayName: 'Mega Mewtwo Y',
+    ability: 'insomnia',
+    types: ['psychic'],
+    sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/10044.png',
+    statBoosts: { hp: 0, attack: 40, defense: -20, 'special-attack': 40, 'special-defense': 30, speed: 10 }
+  },
+  gyaradosita: {
+    stone: 'gyaradosita',
+    pokeName: 'gyarados',
+    stoneName: 'Gyaradosita',
+    megaName: 'gyarados-mega',
+    megaDisplayName: 'Mega Gyarados',
+    ability: 'mold-breaker',
+    types: ['water', 'dark'],
+    sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/10037.png',
+    statBoosts: { hp: 0, attack: 30, defense: 30, 'special-attack': 10, 'special-defense': 30, speed: 0 }
+  },
+  gardevoirita: {
+    stone: 'gardevoirita',
+    pokeName: 'gardevoir',
+    stoneName: 'Gardevoirita',
+    megaName: 'gardevoir-mega',
+    megaDisplayName: 'Mega Gardevoir',
+    ability: 'pixilate',
+    types: ['psychic', 'fairy'],
+    sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/10051.png',
+    statBoosts: { hp: 0, attack: 20, defense: 0, 'special-attack': 40, 'special-defense': 20, speed: 20 }
+  }
+};
+
+const ABILITY_TRANSLATIONS = {
+  'levitate': 'Levitación',
+  'flash-fire': 'Absorbe Fuego',
+  'water-absorb': 'Absorbe Agua',
+  'overgrow': 'Espesura',
+  'blaze': 'Mar Llamas',
+  'torrent': 'Torrente',
+  'rough-skin': 'Piel Tosca',
+  'sturdy': 'Robustez',
+  'adaptability': 'Adaptable',
+  'sand-force': 'Poder Arena',
+  'tough-claws': 'Garra Afilada',
+  'shadow-tag': 'Sombra Trampa',
+  'insomnia': 'Insomnio',
+  'mold-breaker': 'Rompemoldes',
+  'pixilate': 'Piel Férica',
+  'mega-launcher': 'Megadisparador',
+  'thick-fat': 'Sebo',
+  'steadfast': 'Impasible',
+  'drought': 'Sequía'
+};
+function translateAbility(name) {
+  return ABILITY_TRANSLATIONS[name] || name.replace(/-/g, ' ');
+}
+
 const TYPE_COLORS = {
   fire:'#ff6b35',water:'#4dabf7',grass:'#69db7c',electric:'#ffd43b',
   psychic:'#f783ac',ice:'#a5f3fc',dragon:'#845ef7',dark:'#6b7280',
@@ -997,22 +1173,28 @@ function renderGrid() {
     return;
   }
 
-  grid.innerHTML = filtered.map((p, i) => `
-    <div class="poke-card" onclick="openModal(${p.id})" style="animation-delay:${Math.min(i,30)*0.04}s">
-      <div class="poke-number">#${String(p.id).padStart(3,'0')}</div>
-      <div class="poke-img-wrap">
-        <img class="poke-img" 
-             src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${p.id}.png"
-             loading="lazy"
-             alt="${p.name}"
-             onerror="this.src='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${p.id}.png'"/>
+  grid.innerHTML = filtered.map((p, i) => {
+    const hasMega = Object.values(MEGA_DATA).some(m => m.pokeName === p.name.toLowerCase());
+    return `
+      <div class="poke-card" onclick="openModal(${p.id})" style="animation-delay:${Math.min(i,30)*0.04}s">
+        <div class="poke-number" style="display:flex; justify-content:space-between; align-items:center;">
+          <span>#${String(p.id).padStart(3,'0')}</span>
+          ${hasMega ? `<span style="background:var(--accent); color:var(--black); font-size:.42rem; padding:2px 4px; border-radius:3px; font-weight:800; font-family:'Press Start 2P',monospace;">MEGA</span>` : ''}
+        </div>
+        <div class="poke-img-wrap">
+          <img class="poke-img" 
+               src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${p.id}.png"
+               loading="lazy"
+               alt="${p.name}"
+               onerror="this.src='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${p.id}.png'"/>
+        </div>
+        <div class="poke-name">${p.name}</div>
+        <div class="poke-types" id="types-${p.id}">
+          <span class="type-badge" style="background:#444">•••</span>
+        </div>
       </div>
-      <div class="poke-name">${p.name}</div>
-      <div class="poke-types" id="types-${p.id}">
-        <span class="type-badge" style="background:#444">•••</span>
-      </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 
   // Lazy-load types in batches
   loadTypesInView(filtered);
@@ -1233,6 +1415,36 @@ async function openModal(id) {
 
     const effectivenessHtml = buildEffectivenessHtml(types);
 
+    // Build moves list HTML
+    const sortedMoves = [...poke.moves].sort((a,b) => a.move.name.localeCompare(b.move.name));
+    const movesHtml = sortedMoves.map(m => `
+      <span style="background:rgba(255,255,255,0.04); padding:4px 8px; border-radius:4px; font-size:.72rem; text-transform:capitalize; color:var(--text); border:1px solid var(--border); white-space:nowrap; display:inline-block;">
+        ${m.move.name.replace(/-/g, ' ')}
+      </span>`).join('');
+
+    // Build Megaevolutions HTML
+    const baseName = poke.name.toLowerCase();
+    const megaOptions = Object.values(MEGA_DATA).filter(m => m.pokeName === baseName);
+    let megaHtml = '';
+    if (megaOptions.length > 0) {
+      megaHtml = `
+        <div>
+          <div class="section-title">Megaevoluciones</div>
+          <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap:10px;">
+            ${megaOptions.map(m => `
+              <div style="background:var(--card); border:1px solid var(--border); border-radius:12px; padding:10px; display:flex; align-items:center; gap:12px;">
+                <img src="${m.sprite}" style="width:54px; height:54px; image-rendering:pixelated; filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3));"/>
+                <div>
+                  <div style="font-weight:800; color:var(--accent); text-transform:uppercase; font-family:'Press Start 2P',monospace; font-size:.52rem; line-height:1.2;">${m.megaDisplayName}</div>
+                  <div style="font-size:.65rem; color:var(--text); margin-top:4px; text-transform:capitalize;">Tipos: ${m.types.join(' / ')}</div>
+                  <div style="font-size:.65rem; color:var(--muted); text-transform:capitalize;">Habilidad: ${translateAbility(m.ability)}</div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>`;
+    }
+
     // Evolution chain
     let evoHtml = '';
     try {
@@ -1318,6 +1530,13 @@ async function openModal(id) {
           <div class="section-title">Habilidades</div>
           <div class="abilities-list">${abilitiesHtml}</div>
         </div>
+        <div>
+          <div class="section-title">Movimientos disponibles</div>
+          <div style="display:flex; flex-wrap:wrap; gap:6px; max-height:180px; overflow-y:auto; border:1px solid var(--border); border-radius:10px; padding:10px; background:var(--card);">
+            ${movesHtml}
+          </div>
+        </div>
+        ${megaHtml}
         ${evoHtml}
       </div>`;
 
@@ -1361,6 +1580,24 @@ document.getElementById('genFilter').addEventListener('click', e => {
   currentGen = e.target.dataset.gen;
   renderGrid();
 });
+
+// Dox Warning click handlers
+const doxOverlay = document.getElementById('doxOverlay');
+const doxVideo = document.getElementById('doxVideo');
+const doxBtn = document.getElementById('doxBtn');
+
+if (doxBtn) {
+  doxBtn.addEventListener('click', () => {
+    doxOverlay.style.display = 'flex';
+    doxVideo.currentTime = 0;
+    doxVideo.play().catch(err => console.log("Auto-play blocked or error: ", err));
+  });
+}
+
+function closeDox() {
+  doxOverlay.style.display = 'none';
+  doxVideo.pause();
+}
 
 loadPokemonList();
 initTypeFilter();

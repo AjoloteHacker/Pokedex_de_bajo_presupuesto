@@ -12,6 +12,7 @@ const mimeTypes = {
   '.json': 'application/json',
   '.png':  'image/png',
   '.ico':  'image/x-icon',
+  '.mp4':  'video/mp4',
 };
 
 const httpServer = http.createServer((req, res) => {
